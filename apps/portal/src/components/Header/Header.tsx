@@ -1,0 +1,201 @@
+'use client'
+import {
+    AppAppearanceConfig,
+    AppMenuConfig,
+    AppMeta,
+} from '@packages/shared/schemas'
+import {
+    AppShell,
+    Box,
+    Burger,
+    Container,
+    Flex,
+    Image,
+    Stack,
+    Title,
+} from '@mantine/core'
+import NextImage from 'next/image'
+import { getForeground } from '@packages/shared/utils'
+import { HeaderMenu } from '@/components/AppMenu/HeaderMenu'
+import { useGetImageUrl } from '@/utils/client/images'
+import { LanguageSwitcher } from '@/components/LanguageSwitcher'
+import { useTranslations } from 'next-intl'
+
+export function AppHeader({
+    config,
+    opened,
+    toggle,
+    menuConfig,
+    metadata,
+}: {
+    config: AppAppearanceConfig
+    menuConfig: AppMenuConfig
+    opened: boolean
+    toggle(): void
+    metadata: AppMeta
+}) {
+    const hasMenu = menuConfig.items.length > 1
+    const { header: headerConfig } = config
+    const backgroundColor = headerConfig.style?.coloredBackground
+        ? headerConfig?.style.usePrimaryColorAsBackgroundColor
+            ? config.colors.primary
+            : headerConfig.style?.headerBackgroundColor
+        : undefined
+    const foregroundColor = backgroundColor
+        ? getForeground(backgroundColor)
+        : undefined
+    const headerBackgroundColor = backgroundColor ?? foregroundColor
+    const title = headerConfig.title.text
+    const subtitle = headerConfig.subtitle.text
+    const titleTextColor =
+        headerConfig.title.style?.textColor ?? foregroundColor
+    const titleTextSize = headerConfig.title.style?.textSize ?? 20
+    const subtitleTextColor =
+        headerConfig.subtitle.style?.textColor ?? foregroundColor
+    const subtitleTextSize = headerConfig.subtitle.style?.textSize ?? 14
+    const headerTitleStackAlign =
+        headerConfig.title.style?.align === 'center'
+            ? 'center'
+            : headerConfig.title.style?.align === 'right'
+              ? 'flex-end'
+              : 'flex-start'
+
+    const headerSubtitleStackAlign =
+        headerConfig.subtitle.style?.align === 'center'
+            ? 'center'
+            : headerConfig.subtitle.style?.align === 'right'
+              ? 'flex-end'
+              : 'flex-start'
+
+    const getImageUrl = useGetImageUrl()
+    const t = useTranslations('layout')
+
+    const leadingImage = getImageUrl(metadata.icon)
+    const trailingImage = headerConfig.style.trailingLogo?.url
+        ? getImageUrl(headerConfig.style.trailingLogo?.url)
+        : undefined
+
+    return (
+        <AppShell.Header p={0} bg={headerBackgroundColor}>
+            <Flex className="h-full" gap="lg" align="center" p="sm">
+                {hasMenu && (
+                    <Burger
+                        color={titleTextColor}
+                        opened={opened}
+                        onClick={toggle}
+                        hiddenFrom="sm"
+                        size="sm"
+                        aria-label={t('toggleNavigation')}
+                    />
+                )}
+                {headerConfig.style?.leadingLogo?.show && (
+                    <Box
+                        style={{
+                            width:
+                                headerConfig.style?.leadingLogo?.width ?? 100,
+                            height:
+                                headerConfig.style?.leadingLogo?.height ?? 100,
+                        }}
+                    >
+                        <Image
+                            component={NextImage}
+                            width={
+                                headerConfig.style?.leadingLogo?.width ?? 100
+                            }
+                            height={
+                                headerConfig.style?.leadingLogo?.height ?? 100
+                            }
+                            style={{
+                                width:
+                                    headerConfig.style?.leadingLogo?.width ??
+                                    100,
+                                height:
+                                    headerConfig.style?.leadingLogo?.height ??
+                                    100,
+                            }}
+                            alt={t('logo')}
+                            src={leadingImage}
+                        />
+                    </Box>
+                )}
+                <Stack
+                    className="h-full"
+                    align={headerTitleStackAlign}
+                    gap="xs"
+                    justify="space-between"
+                    flex={1}
+                    p={0}
+                    my={0}
+                >
+                    <Stack p={0} flex={1} justify="center" gap={0}>
+                        <Title
+                            c={titleTextColor}
+                            style={{
+                                fontSize: titleTextSize,
+                                alignSelf: headerTitleStackAlign,
+                            }}
+                            order={2}
+                        >
+                            {title}
+                        </Title>
+                        {subtitle && (
+                            <Title
+                                c={subtitleTextColor}
+                                order={4}
+                                style={{
+                                    fontSize: subtitleTextSize,
+                                    alignSelf: headerSubtitleStackAlign,
+                                }}
+                            >
+                                {subtitle}
+                            </Title>
+                        )}
+                    </Stack>
+                    <Container p={0} className="min-w-full">
+                        {menuConfig.position === 'header' && hasMenu && (
+                            <HeaderMenu
+                                backgroundColor={headerBackgroundColor}
+                                foregroundColor={
+                                    headerConfig.title.style?.textColor
+                                }
+                                config={menuConfig}
+                            />
+                        )}
+                    </Container>
+                </Stack>
+                <LanguageSwitcher color={titleTextColor} />
+                {headerConfig.style?.trailingLogo?.show && (
+                    <Box
+                        style={{
+                            height:
+                                headerConfig.style?.trailingLogo?.height ?? 100,
+                            width:
+                                headerConfig.style?.trailingLogo?.width ?? 100,
+                        }}
+                    >
+                        <Image
+                            component={NextImage}
+                            width={
+                                headerConfig.style?.trailingLogo?.width ?? 100
+                            }
+                            height={
+                                headerConfig.style?.trailingLogo?.height ?? 100
+                            }
+                            style={{
+                                width:
+                                    headerConfig.style?.trailingLogo?.width ??
+                                    100,
+                                height:
+                                    headerConfig.style?.trailingLogo?.height ??
+                                    100,
+                            }}
+                            alt={t('logo')}
+                            src={trailingImage}
+                            hiddenFrom="!xs"
+                        />
+                    </Box>
+                )}
+            </Flex>
+        </AppShell.Header>
+    )
+}

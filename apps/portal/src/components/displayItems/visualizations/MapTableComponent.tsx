@@ -1,0 +1,171 @@
+'use client'
+
+import {
+    AnalyticsData,
+    MapConfig,
+    MapLayerType,
+} from '@packages/shared/schemas'
+import { flattenDeep, head } from 'lodash-es'
+import { OrgUnitSelection } from '@hisptz/dhis2-utils'
+import { getOrgUnitsSelection } from '@/utils/orgUnits'
+import { useDataQuery } from '@dhis2/app-runtime'
+import { Loader } from '@mantine/core'
+import { useTranslations } from 'next-intl'
+import dynamic from 'next/dynamic'
+import { RefObject, useMemo } from 'react'
+import { getOrgUnitSelectionFromIds } from '@packages/shared/visualizations'
+
+const NoSSRDHIS2Table = dynamic(
+    () =>
+        import('@hisptz/dhis2-analytics').then(({ DHIS2PivotTable }) => ({
+            default: DHIS2PivotTable,
+        })),
+    {
+        ssr: false,
+        loading: () => {
+            return (
+                <div className="w-full h-full flex items-center justify-center min-h-100">
+                    <Loader size="md" />
+                </div>
+            )
+        },
+    }
+)
+
+const query = {
+    data: {
+        resource: 'analytics',
+        params: (variables: Record<string, string[]>) => {
+            const { dx, ou, pe } = variables as {
+                dx: string[]
+                ou: string[]
+                pe: string[]
+            }
+            return {
+                dimension: `dx:${dx.join(';')},ou:${ou.join(';')}`,
+                filter: `pe:${pe.join(';')}`,
+                includeMetadataDetails: 'true',
+            }
+        },
+    },
+}
+
+type ResponseType = {
+    data: AnalyticsData
+}
+
+export function MapTableComponent({
+    mapConfig,
+    setRef,
+    orgUnitSelection,
+    periodSelection,
+    fullScreen,
+}: {
+    mapConfig: MapConfig
+    setRef: RefObject<HTMLTableElement | null>
+    orgUnitSelection?: OrgUnitSelection
+    fullScreen: boolean
+    periodSelection?: {
+        periods: string[]
+    }
+}) {
+    const t = useTranslations('errors')
+    const activePeriodSelection = useMemo(() => {
+        if (periodSelection) {
+            return periodSelection
+        }
+        //This is a hack for now as there may be differences in map view periods
+        const periods = head(
+            mapConfig.mapViews.filter((view) =>
+                view.layer.includes(MapLayerType.THEMATIC)
+            )
+        )!
+            .filters.map(({ items }) => items.map(({ id }) => id))
+            .flat()
+        return {
+            periods,
+        }
+    }, [mapConfig.mapViews, periodSelection])
+
+    const activeOrgUnitSelection = useMemo(() => {
+        if (orgUnitSelection) {
+            return orgUnitSelection
+        }
+        const orgUnitConfig = head(
+            mapConfig.mapViews.filter((view) =>
+                view.layer.includes(MapLayerType.THEMATIC)
+            )
+        )!
+            .rows.map(({ items }) => items.map(({ id }) => id))
+            .flat()
+
+        return getOrgUnitSelectionFromIds(orgUnitConfig)
+    }, [mapConfig.mapViews, orgUnitSelection])
+
+    const dx = flattenDeep(
+        mapConfig.mapViews.map((view) =>
+            view.columns.map(({ items }) => items.map(({ id }) => id))
+        )
+    )
+
+    const ou = getOrgUnitsSelection(activeOrgUnitSelection)
+    const pe = activePeriodSelection.periods
+    const { loading, data, error } = useDataQuery<ResponseType>(query, {
+        variables: {
+            ou,
+            pe,
+            dx,
+        },
+    })
+
+    if (loading) {
+        return (
+            <div className="flex justify-center items-center h-full">
+                <Loader size="md" />{' '}
+            </div>
+        )
+    }
+
+    if (error) {
+        return (
+            <div className="flex justify-center items-center h-full">
+                <span>
+                    {t('errorGettingData')}: {error.message}
+                </span>
+            </div>
+        )
+    }
+
+    return (
+        <NoSSRDHIS2Table
+            setRef={setRef as unknown as (ref: HTMLTableElement) => void}
+            tableProps={{
+                scrollHeight: fullScreen ? `calc(100dvh - 96px)` : `600px`,
+            }}
+            analytics={data!.data}
+            config={{
+                options: {
+                    fixColumnHeaders: true,
+                    fixRowHeaders: true,
+                },
+                layout: {
+                    columns: [
+                        {
+                            dimension: 'dx',
+                        },
+                    ],
+                    filter: [
+                        {
+                            dimension: 'pe',
+                        },
+                    ],
+                    rows: [
+                        {
+                            dimension: 'ou',
+                        },
+                    ],
+                },
+            }}
+        />
+    )
+}

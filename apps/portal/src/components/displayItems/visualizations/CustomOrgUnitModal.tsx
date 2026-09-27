@@ -1,0 +1,133 @@
+'use client'
+
+import { useEffect, useState } from 'react'
+import { Box, Button, Loader, Modal, Text, Title } from '@mantine/core'
+import { OrgUnitSelector } from '@hisptz/dhis2-ui'
+import { OrganisationUnit, OrgUnitSelection } from '@hisptz/dhis2-utils'
+import { useTranslations } from 'next-intl'
+import { useOrgUnit } from '@/utils/orgUnits'
+import { isEmpty } from 'lodash-es'
+
+export function CustomOrgUnitModal({
+    orgUnitState,
+    open,
+    onReset,
+    handleClose,
+    title,
+    orgUnitsId,
+    limitSelectionToLevels,
+    singleSelection,
+    onUpdate,
+}: {
+    orgUnitState?: string[]
+    open: boolean
+    onReset: () => void
+    handleClose: () => void
+    title: string
+    orgUnitsId?: string[]
+    limitSelectionToLevels?: number[]
+    singleSelection?: boolean
+    onUpdate: (val: string[] | undefined) => void
+}) {
+    const t = useTranslations('visualization')
+    const tCommon = useTranslations('common')
+    const { orgUnit: defaultOrgUnits, loading: orgUnitLoading } =
+        useOrgUnit(orgUnitState)
+
+    const { orgUnit: limitedOrgUnits, loading: limitedorgUnitLoading } =
+        useOrgUnit(orgUnitsId)
+
+    const [selectedOrgUnits, setOrgUnits] = useState<
+        OrganisationUnit[] | undefined
+    >(defaultOrgUnits)
+
+    useEffect(() => {
+        setOrgUnits(defaultOrgUnits)
+    }, [defaultOrgUnits])
+
+    const orgUnits = selectedOrgUnits?.map(({ id }) => id)
+
+    return (
+        <Modal
+            title={
+                <Text fw={'bold'} id="modal-title">
+                    {title}
+                </Text>
+            }
+            size="lg"
+            opened={open}
+            onClose={handleClose}
+            aria-labelledby="modal-title"
+            aria-describedby="modal-description"
+        >
+            <Box key={`${title}-card`}>
+                <div className="flex flex-row justify-between items-end">
+                    <Title id="modal-title" order={5}>
+                        {t('selectLocations')}
+                    </Title>
+                    <Button
+                        onClick={() => {
+                            onReset()
+                            handleClose()
+                        }}
+                        disabled={isEmpty(orgUnitState)}
+                        variant="subtle"
+                    >
+                        {tCommon('reset')}
+                    </Button>
+                </div>
+
+                {orgUnitLoading || limitedorgUnitLoading ? (
+                    <div className="flex justify-center items-center h-full">
+                        <Loader size="md" />
+                    </div>
+                ) : (
+                    <div className="flex justify-center items-center h-full pb-2">
+                        <OrgUnitSelector
+                            limitSelectionToLevels={limitSelectionToLevels}
+                            searchable
+                            roots={
+                                isEmpty(orgUnitsId)
+                                    ? undefined
+                                    : limitedOrgUnits
+                            }
+                            singleSelection={singleSelection}
+                            value={{
+                                orgUnits: selectedOrgUnits ?? [],
+                            }}
+                            onUpdate={(val: OrgUnitSelection) => {
+                                setOrgUnits(
+                                    !isEmpty(val.orgUnits) && val.orgUnits
+                                        ? singleSelection
+                                            ? [[...val.orgUnits].reverse()[0]]
+                                            : val.orgUnits
+                                        : defaultOrgUnits
+                                )
+                            }}
+                        />
+                    </div>
+                )}
+                <div className="flex flex-row justify-end gap-2">
+                    <Button
+                        onClick={() => {
+                            handleClose()
+                        }}
+                        variant="subtle"
+                        color="gray"
+                    >
+                        {tCommon('cancel')}
+                    </Button>
+                    <Button
+                        onClick={() => {
+                            onUpdate(orgUnits)
+                            handleClose()
+                        }}
+                        disabled={isEmpty(selectedOrgUnits)}
+                    >
+                        {tCommon('update')}
+                    </Button>
+                </div>
+            </Box>
+        </Modal>
+    )
+}

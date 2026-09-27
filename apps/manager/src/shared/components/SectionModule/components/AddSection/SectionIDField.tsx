@@ -1,0 +1,23 @@
+import { useFormContext, useWatch } from 'react-hook-form'
+import i18n from '@dhis2/d2-i18n'
+import { RHFTextInputField } from '@hisptz/dhis2-ui'
+import { useEffect } from 'react'
+import { kebabCase } from 'lodash-es'
+import { Section } from '@packages/shared/schemas'
+
+export function SectionIDField() {
+    const { setValue } = useFormContext<Section>()
+    const label = useWatch<Section, 'label'>({
+        name: 'label',
+    })
+
+    useEffect(() => {
+        if (label) {
+            setValue('id', kebabCase(label.toLowerCase()))
+        }
+    }, [label, setValue])
+
+    return (
+        <RHFTextInputField required disabled name="id" label={i18n.t('ID')} />
+    )
+}

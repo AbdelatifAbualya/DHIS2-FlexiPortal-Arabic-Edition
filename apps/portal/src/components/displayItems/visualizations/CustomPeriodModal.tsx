@@ -1,0 +1,264 @@
+import { useCallback, useState } from 'react'
+import { Box, Button, Group, Modal, Text, Title } from '@mantine/core'
+import { PeriodTypeCategory, PeriodUtility } from '@hisptz/dhis2-utils'
+import { generateFixedPeriods } from '@dhis2/multi-calendar-dates'
+import { useTranslations } from 'next-intl'
+import { usePeriodLabels } from '@/hooks/periods'
+import { SelectInputField } from './SelectInputField'
+import { first, intersectionBy, isEmpty } from 'lodash-es'
+import { YearInputField } from './YearInputField'
+
+export function CustomPeriodModal({
+    open,
+    periodState,
+    onReset,
+    handleClose,
+    onUpdate,
+    title,
+    categories,
+    periodTypes,
+    singleSelection,
+    periods,
+}: {
+    open: boolean
+    periodState?: string[]
+    onReset: () => void
+    handleClose: () => void
+    onUpdate: (val: string[]) => void
+    title: string
+    categories?: ('RELATIVE' | 'FIXED')[]
+    periodTypes?: string[]
+    singleSelection?: boolean
+    periods?: string[]
+}) {
+    const t = useTranslations('visualization')
+    const tCommon = useTranslations('common')
+    const {
+        locale,
+        periodLabel,
+        periodTypeLabel,
+        periodCategoryLabel,
+        fixedPeriodName,
+    } = usePeriodLabels()
+    const defaultCategoryOptions = [
+        {
+            label: periodCategoryLabel(PeriodTypeCategory.RELATIVE),
+            value: PeriodTypeCategory.RELATIVE,
+        },
+        {
+            label: periodCategoryLabel(PeriodTypeCategory.FIXED),
+            value: PeriodTypeCategory.FIXED,
+        },
+    ]
+    const categoryOptions =
+        categories?.map((category: string) => {
+            return {
+                value: category.toUpperCase(),
+                label: periodCategoryLabel(category.toUpperCase()),
+            }
+        }) ?? defaultCategoryOptions
+    const currentYear = new Date().getFullYear()
+
+    const [currentCategory, setCategory] = useState<string | undefined>(
+        first(categoryOptions)?.value
+    )
+
+    const periodUtility = currentCategory
+        ? PeriodUtility.fromObject({
+              year: currentYear,
+              category: currentCategory as unknown as PeriodTypeCategory,
+              preference: {
+                  allowFuturePeriods: false,
+              },
+          })
+        : null
+
+    const defaultPeriodTypes =
+        periodUtility?.periodTypes.map((periodType) => {
+            return {
+                label: periodTypeLabel(
+                    periodType.config.id,
+                    currentCategory === PeriodTypeCategory.RELATIVE
+                        ? 'RELATIVE'
+                        : 'FIXED',
+                    periodType.config.name
+                ),
+                value: periodType.config.id,
+            }
+        }) ?? []
+
+    const periodTypesFromConfig = (
+        periodTypes ?? ['QUARTERLY', 'YEARLY', 'MONTHLY']
+    )?.map((periodType) => {
+        return { value: periodType, label: periodType.toLowerCase() }
+    })
+
+    const filteredPeriodTypes: {
+        value: string
+        label: string
+    }[] = isEmpty(periodTypesFromConfig)
+        ? defaultPeriodTypes
+        : intersectionBy(defaultPeriodTypes, periodTypesFromConfig!, 'value')
+
+    const periodTypeOptions = filteredPeriodTypes
+
+    const [currentPeriodType, setPeriodType] = useState<string | undefined>(
+        first(periodTypeOptions)?.value
+    )
+
+    const [selectedYear, setYear] = useState<number>(currentYear)
+
+    const [selectedPeriods, setPeriods] = useState<string[]>([])
+
+    const relativePeriods =
+        periodUtility
+            ?.getPeriodType(currentPeriodType ?? '')
+            ?.periods.map((period) => {
+                return {
+                    value: period.id,
+                    label: periodLabel(period.id, period.name),
+                }
+            }) ?? []
+
+    const fixedPeriods =
+        currentCategory === PeriodTypeCategory.FIXED
+            ? generateFixedPeriods({
+                  year:
+                      currentPeriodType === 'YEARLY' && selectedYear < 1009
+                          ? 1009
+                          : selectedYear,
+                  calendar: 'gregory',
+                  periodType: currentPeriodType,
+                  locale,
+              }).map((period: { id: string; displayName: string }) => ({
+                  value: period.id,
+                  label: fixedPeriodName(period.displayName),
+              }))
+            : []
+
+    const defaultPeriods =
+        currentCategory == PeriodTypeCategory.RELATIVE
+            ? relativePeriods
+            : fixedPeriods
+
+    const periodsFromConfig = periods?.map((period) => {
+        return { value: period, label: period.toLowerCase() }
+    })
+
+    const periodOptions = isEmpty(periodsFromConfig)
+        ? defaultPeriods
+        : intersectionBy(defaultPeriods, periodsFromConfig!, 'value')
+
+    const handlePeriodsChange = useCallback(
+        (val: string | string[]) =>
+            setPeriods(Array.isArray(val) ? val : [val]),
+        []
+    )
+
+    const sanitizedPeriodState = periodState?.map((id: string) => {
+        return JSON.stringify({ value: id, label: periodLabel(id) })
+    })
+
+    return (
+        <Modal
+            size="lg"
+            title={
+                <Text fw={'bold'} id="modal-title">
+                    {title}
+                </Text>
+            }
+            key={`${title}-modal`}
+            opened={open}
+            onClose={handleClose}
+            aria-labelledby="modal-title"
+            aria-describedby="modal-description"
+        >
+            <Box key={`${title}-card`}>
+                <div className="flex flex-row justify-between items-end">
+                    <Title id="modal-title" order={5}>
+                        {t('selectPeriods')}
+                    </Title>
+                    <Button
+                        onClick={() => {
+                            onReset()
+                            handleClose()
+                        }}
+                        disabled={isEmpty(periodState)}
+                        variant="subtle"
+                    >
+                        {tCommon('reset')}
+                    </Button>
+                </div>
+
+                <div
+                    id="modal-description"
+                    style={{ marginTop: 8, marginBottom: 16 }}
+                >
+                    <SelectInputField
+                        key={`${title}-categories`}
+                        label={t('categories')}
+                        value={currentCategory}
+                        onChange={(val) =>
+                            setCategory(Array.isArray(val) ? val[0] : val)
+                        }
+                        options={categoryOptions}
+                    />
+
+                    <Group grow>
+                        <SelectInputField
+                            key={`${title}-period-types`}
+                            value={currentPeriodType}
+                            label={t('periodTypes')}
+                            onChange={(val) =>
+                                setPeriodType(Array.isArray(val) ? val[0] : val)
+                            }
+                            options={periodTypeOptions}
+                        />
+                        {currentCategory == PeriodTypeCategory.FIXED ? (
+                            <YearInputField
+                                key={`${title}-year`}
+                                label={t('year')}
+                                onChange={setYear}
+                            />
+                        ) : null}
+                    </Group>
+
+                    <SelectInputField
+                        key={`${title}-periods`}
+                        label={t('periods')}
+                        value={
+                            singleSelection
+                                ? sanitizedPeriodState?.[0]
+                                : sanitizedPeriodState
+                        }
+                        onChange={handlePeriodsChange}
+                        options={periodOptions}
+                        multiple={!singleSelection}
+                    />
+                </div>
+                <div className="flex flex-row justify-end gap-2">
+                    <Button
+                        onClick={() => {
+                            handleClose()
+                        }}
+                        variant="subtle"
+                        color="gray"
+                    >
+                        {tCommon('cancel')}
+                    </Button>
+                    <Button
+                        onClick={() => {
+                            onUpdate(selectedPeriods)
+                            handleClose()
+                        }}
+                        disabled={
+                            isEmpty(periodState) && isEmpty(selectedPeriods)
+                        }
+                    >
+                        {tCommon('update')}
+                    </Button>
+                </div>
+            </Box>
+        </Modal>
+    )
+}

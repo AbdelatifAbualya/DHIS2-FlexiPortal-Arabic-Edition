@@ -1,0 +1,18 @@
+import { z } from 'zod'
+import { loadEnvConfig } from '@next/env'
+
+const projectDir = process.cwd()
+loadEnvConfig(projectDir)
+
+const envSchema = z.object({
+    DHIS2_BASE_URL: z.string(),
+    DHIS2_BASE_PAT_TOKEN: z.string(),
+    NEXT_PUBLIC_CONTEXT_PATH: z.string().optional(),
+    DEFAULT_LOCALE: z.string().optional(),
+})
+
+export const env: z.infer<typeof envSchema> = envSchema.safeParse(process.env)
+    .data ?? {
+    DHIS2_BASE_URL: 'http://localhost:8080',
+    DHIS2_BASE_PAT_TOKEN: 'd2_pat-placeholder',
+}

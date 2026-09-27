@@ -1,0 +1,354 @@
+'use client'
+
+import { ActionIcon, Tooltip } from '@mantine/core'
+import { useTranslations } from 'next-intl'
+import {
+    IconClock,
+    IconDownload,
+    IconMap,
+    IconMapPin,
+    IconMaximize,
+    IconMinimize,
+    IconTable,
+} from '@tabler/icons-react'
+import { FullScreen, useFullScreenHandle } from 'react-full-screen'
+import { OrgUnitSelection } from '@hisptz/dhis2-utils'
+import { RefObject, useCallback, useMemo, useRef, useState } from 'react'
+import L, { Map as LeafletMap } from 'leaflet'
+import 'leaflet-easyprint'
+import { CustomOrgUnitModal } from './CustomOrgUnitModal'
+import { CustomPeriodModal } from './CustomPeriodModal'
+import { useBoolean, useResizeObserver } from 'usehooks-ts'
+import { MapTableComponent } from '@/components/displayItems/visualizations/MapTableComponent'
+import {
+    ActionMenu,
+    ActionMenuGroup,
+} from '@/components/displayItems/visualizations/ActionMenu'
+import { downloadExcelFromTable } from '@/utils/table'
+import { CaptionPopover } from '@/components/CaptionPopover'
+import { MapConfig, VisualizationItem } from '@packages/shared/schemas'
+import { VisualizationTitle } from '@/components/displayItems/visualizations/VisualizationTitle'
+import {
+    getOrgUnitSelectionFromIds,
+    MapVisualizer,
+} from '@packages/shared/visualizations'
+import { useSearchParams } from 'next/navigation'
+import { defaultTo, isEmpty } from 'lodash-es'
+
+export function MapVisComponent({
+    mapConfig,
+    config,
+    showFilter = true,
+    disableActions,
+}: {
+    mapConfig: MapConfig
+    config: VisualizationItem
+    showFilter?: boolean
+    disableActions?: boolean
+}) {
+    const searchParams = useSearchParams()
+    const t = useTranslations('visualization')
+    const tCommon = useTranslations('common')
+    const { orgUnitConfig, periodConfig } = config
+    const { value: showTable, toggle: toggleShowTable } = useBoolean(false)
+    const handler = useFullScreenHandle()
+    const mapContainer = useRef<HTMLDivElement | null>(null)
+
+    const [map, setMap] = useState<LeafletMap | null>(null)
+    const mapRef = useCallback((map: LeafletMap) => {
+        setMap(map)
+    }, [])
+
+    const updateMap = () => {
+        if (map) {
+            map.invalidateSize()
+            map.fitBounds(map.getBounds())
+            map.panInsideBounds(map.getBounds())
+        }
+    }
+
+    useResizeObserver({
+        ref: mapContainer as unknown as RefObject<HTMLDivElement>,
+        onResize: () => {
+            updateMap()
+        },
+    })
+
+    const printPlugin: {
+        printMap: (size: string, filename: string) => void
+        _map: LeafletMap
+    } | null = useMemo(() => {
+        if (map) {
+            map.scrollWheelZoom.disable()
+            return L.easyPrint({
+                sizeModes: ['A4Portrait', 'A4Landscape'],
+                hidden: true,
+                exportOnly: true,
+                spinnerBgColor: '#FFFFFF',
+                customSpinnerClass: 'color-primary',
+                customWindowTitle: `${mapConfig.name}`,
+                hideClasses: ['leaflet-control', 'leaflet-bar'],
+            }).addTo(map)
+        }
+        return null
+    }, [map, mapConfig.name])
+
+    const tableRef = useRef<HTMLTableElement>(null)
+
+    const onDownload = () => {
+        const label = `${mapConfig.name.toLowerCase()}`
+        if (showTable) {
+            downloadExcelFromTable(tableRef.current!, label)
+            return
+        }
+        if (printPlugin) {
+            const label = `${mapConfig.name.toLowerCase()}`
+            printPlugin?.printMap('A4Landscape page', label.toLowerCase())
+        }
+    }
+
+    const {
+        value: orgUnits,
+        setTrue: showOrgUnits,
+        setFalse: hideOrgUnits,
+    } = useBoolean(false)
+
+    const {
+        value: period,
+        setTrue: showPeriods,
+        setFalse: hidePeriods,
+    } = useBoolean(false)
+
+    const [periodState, setPeriodState] = useState<string[] | undefined>()
+    const [orgUnitSelectionState, setOrgUnitSelectionState] = useState<
+        OrgUnitSelection | undefined
+    >()
+
+    const onFullScreen = async () => {
+        if (handler.active) {
+            await handler.exit()
+        } else {
+            await handler.enter()
+        }
+        updateMap()
+    }
+
+    const actionMenuGroups: ActionMenuGroup[] = useMemo(() => {
+        const menus: ActionMenuGroup[] = [
+            {
+                label: t('view'),
+                actions: [
+                    {
+                        label: showTable ? t('showMap') : t('showTable'),
+                        icon: showTable ? <IconMap /> : <IconTable />,
+                        onClick: toggleShowTable,
+                    },
+                    {
+                        label: t('fullPage'),
+                        icon: handler.active ? (
+                            <IconMinimize />
+                        ) : (
+                            <IconMaximize />
+                        ),
+                        onClick: onFullScreen,
+                    },
+                ],
+            },
+            {
+                actions: [
+                    {
+                        label: t('download'),
+                        onClick: onDownload,
+                        icon: <IconDownload />,
+                    },
+                ],
+            },
+        ]
+
+        if (showFilter) {
+            menus.splice(1, 0, {
+                label: t('filters'),
+                actions: [
+                    {
+                        label: t('location'),
+                        icon: <IconMapPin />,
+                        onClick: showOrgUnits,
+                    },
+                    {
+                        label: t('period'),
+                        icon: <IconClock />,
+                        onClick: showPeriods,
+                    },
+                ],
+            })
+        }
+
+        return menus
+    }, [
+        t,
+        showTable,
+        toggleShowTable,
+        handler.active,
+        onFullScreen,
+        showOrgUnits,
+        showPeriods,
+        onDownload,
+        showFilter,
+    ])
+
+    const periods = searchParams.get('pe')?.split(',')
+    const orgUnitsIds = searchParams.get('ou')?.split(',')
+
+    return (
+        <>
+            <FullScreen
+                onChange={() => {
+                    updateMap()
+                }}
+                className="bg-white w-full h-full"
+                handle={handler}
+            >
+                <div className="flex flex-col gap-2 p-4  w-full h-full ">
+                    <div className="flex flex-row place-content-between">
+                        <VisualizationTitle title={mapConfig.name} />
+                        {!disableActions && (
+                            <div className="flex flex-row gap-2">
+                                {handler.active && (
+                                    <Tooltip label={t('exitFullScreen')}>
+                                        <ActionIcon onClick={onFullScreen}>
+                                            {handler.active ? (
+                                                <IconMinimize />
+                                            ) : (
+                                                <IconMaximize />
+                                            )}
+                                        </ActionIcon>
+                                    </Tooltip>
+                                )}
+                                <Tooltip label={t('moreInfo')}>
+                                    <CaptionPopover
+                                        label={mapConfig.name}
+                                        visualization={config}
+                                    />
+                                </Tooltip>
+                                <Tooltip label={tCommon('actions')}>
+                                    <ActionMenu
+                                        actionMenuGroups={actionMenuGroups}
+                                    />
+                                </Tooltip>
+                            </div>
+                        )}
+                    </div>
+                    <div ref={mapContainer} className="flex-1 h-full">
+                        {showTable ? (
+                            <div className="flex-1 h-full">
+                                <MapTableComponent
+                                    fullScreen={handler.active}
+                                    orgUnitSelection={
+                                        !isEmpty(
+                                            orgUnitSelectionState?.orgUnits
+                                        )
+                                            ? orgUnitSelectionState
+                                            : !isEmpty(orgUnitsIds)
+                                              ? getOrgUnitSelectionFromIds(
+                                                    orgUnitsIds ?? []
+                                                )
+                                              : undefined
+                                    }
+                                    periodSelection={
+                                        isEmpty(periodState) && isEmpty(periods)
+                                            ? undefined
+                                            : {
+                                                  periods: defaultTo(
+                                                      isEmpty(periodState)
+                                                          ? periods
+                                                          : periodState,
+                                                      []
+                                                  ),
+                                              }
+                                    }
+                                    setRef={tableRef}
+                                    mapConfig={mapConfig}
+                                />
+                            </div>
+                        ) : (
+                            // Leaflet does not support right-to-left containers
+                            <div dir="ltr" className="w-full h-full">
+                                <MapVisualizer
+                                    mapConfig={mapConfig}
+                                    setRef={mapRef}
+                                    orgUnitSelection={
+                                        !isEmpty(
+                                            orgUnitSelectionState?.orgUnits
+                                        )
+                                            ? orgUnitSelectionState
+                                            : !isEmpty(orgUnitsIds)
+                                              ? getOrgUnitSelectionFromIds(
+                                                    orgUnitsIds ?? []
+                                                )
+                                              : undefined
+                                    }
+                                    periodSelection={
+                                        isEmpty(periodState) && isEmpty(periods)
+                                            ? undefined
+                                            : {
+                                                  periods: !isEmpty(periodState)
+                                                      ? periodState
+                                                      : periods,
+                                              }
+                                    }
+                                />
+                            </div>
+                        )}
+                    </div>
+                </div>
+            </FullScreen>
+            {orgUnits && (
+                <CustomOrgUnitModal
+                    onReset={() => setOrgUnitSelectionState(undefined)}
+                    orgUnitState={
+                        !isEmpty(orgUnitSelectionState?.orgUnits)
+                            ? orgUnitSelectionState?.orgUnits?.map(
+                                  (ou) => ou.id
+                              )
+                            : (orgUnitsIds ?? [])
+                    }
+                    onUpdate={(val) => {
+                        setOrgUnitSelectionState({
+                            orgUnits: val?.map((ou: string) => ({
+                                id: ou,
+                                children: [],
+                            })),
+                            levels: [],
+                            groups: [],
+                        })
+                    }}
+                    open={orgUnits}
+                    title={mapConfig.name}
+                    handleClose={hideOrgUnits}
+                    limitSelectionToLevels={orgUnitConfig?.orgUnitLevels}
+                    orgUnitsId={orgUnitConfig?.orgUnits}
+                    singleSelection={orgUnitConfig?.singleSelection}
+                />
+            )}
+
+            {period && (
+                <CustomPeriodModal
+                    onReset={() => setPeriodState(undefined)}
+                    periodState={
+                        !isEmpty(periodState) ? periodState : (periods ?? [])
+                    }
+                    onUpdate={(val) => {
+                        setPeriodState(val)
+                    }}
+                    open={period}
+                    title={mapConfig.name}
+                    handleClose={hidePeriods}
+                    categories={periodConfig?.categories}
+                    periodTypes={periodConfig?.periodTypes}
+                    periods={periodConfig?.periods}
+                    singleSelection={periodConfig?.singleSelection}
+                />
+            )}
+        </>
+    )
+}

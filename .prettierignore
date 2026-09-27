@@ -1,0 +1,26 @@
+### react template
+
+logs
+**/*.backup.*
+**/*.back.*
+
+node_modules
+bower_components
+
+*.sublime*
+
+psd
+thumb
+sketch
+
+# DHIS2_INSTANCE Platform
+apps/manager/.d2
+apps/manager/src/routeTree.gen.ts
+
+
+src/locales
+build
+*.env
+cypress.env.json
+
+pnpm-lock.yaml
