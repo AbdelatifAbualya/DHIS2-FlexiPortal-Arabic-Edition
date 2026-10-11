@@ -102,11 +102,12 @@ This file lists every change made to [hisptz/dhis2-public-portal](https://github
 
 ### Manager
 
-| File                                                                  | Change                                                                                              |
-| --------------------------------------------------------------------- | --------------------------------------------------------------------------------------------------- |
-| `src/shared/constants/menu.ts`, `src/routeTree.gen.ts` (generated)    | Translations menu entry and route                                                                   |
-| `src/shared/components/ConfigurationPage/utils/configurationUtils.ts` | Datastore save creates the key when older DHIS2 versions return 404 on update (import of a new key) |
-| `i18n/en.pot` (generated)                                             | New Manager strings                                                                                 |
+| File                                                                  | Change                                                                                                                                                                                               |
+| --------------------------------------------------------------------- | ---------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------- |
+| `src/shared/constants/menu.ts`, `src/routeTree.gen.ts` (generated)    | Translations menu entry and route                                                                                                                                                                    |
+| `src/shared/components/ConfigurationPage/utils/configurationUtils.ts` | Datastore save creates the key when older DHIS2 versions return 404 on update (import of a new key)                                                                                                  |
+| `i18n/en.pot` (generated)                                             | New Manager strings                                                                                                                                                                                  |
+| `viteConfigExtensions.mts`                                            | `react-hook-form` added to the Vite `dedupe` list: the Manager bundle contained two copies of it, which crashed the _Add visualization_ dialog (`Cannot read properties of null (reading '_names')`) |
 
 ### Repository
 
